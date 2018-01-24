@@ -1,0 +1,70 @@
+
+import pandas
+import itertools
+import collections
+import nltk
+from nltk.stem.porter import *
+import jellyfish
+
+def match_tastes(df1 = None, df2 = None):
+
+    real_need = str(df2.iloc[0,0])
+    data = df1
+    data.columns = ['Id','source1','source2']
+
+    sc2s = pandas.DataFrame({'source2': ['nolike','like', 'waouh'], 'val': [1,2,3]})
+    data = pandas.merge(data, sc2s, how='inner', on='score2')
+    data_saved = data.copy()
+    
+    spl = real_need.split()
+    sz = len(spl)
+    pieces = []
+    temp = ''
+    for i in range(0,sz):
+        temp = temp + ' ' + spl[i]
+        if(i%2 == 1):
+            pieces.append(temp)
+            temp = ''
+        if(i==sz-1):
+            if(len(temp)>0):
+                pieces.append(temp) 
+    
+    final = pandas.DataFrame(columns=["Id","source1","source2","val","source1_score","source2_score","Score"])
+    
+    stemmer = PorterStemmer()
+	
+    for words_pieces in pieces:
+        data = data_saved.copy()
+
+        sc_scores = []
+        lik_scores = []
+        for row in data.itertuples():
+	          tot_sc = 0
+            tot_lik = 0
+            sc = stemmer.stem(str(row[2]).lower())
+            lik = stemmer.stem(str(row[3]).lower())
+
+
+            for w in words_pieces.split():
+                if(w not in['nolike','like', 'waouh']):
+                    if w in sc:
+                        tot_sc = tot_sc + 8
+                    if(jellyfish.levenshtein_distance(sc,w)>=1):
+                        tot_sc = tot_sc + (1/jellyfish.levenshtein_distance(sc,w))
+                if(w in['nolike','like', 'waouh']):
+                    if(row[4]>=int(sc2s[sc2s.score2 == w.title()]['val'])):
+                        tot_lik = tot_lik + 1
+            sc_scores.append(tot_sc)
+            lik_scores.append(tot_lik)
+            if(tot_sc < 1):
+                tot_lik = 0
+        scs = pandas.DataFrame(sc_scores)
+        lik = pandas.DataFrame(lik_scores)
+
+        data['sc_Score'] = scs
+        data['score2_Score'] = lik
+        data['Score'] = data['sc_Score']+data['score2_Score']
+        data.columns=["Id","sc","score2","val","sc_score","score2_score","Score"]
+        final = pandas.concat([final,data])
+    
+    return final
